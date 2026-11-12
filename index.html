@@ -489,6 +489,10 @@ const promoActive=pr=>pr&&pr.on!==false&&(pr.withCounter===false||counterOn());
 const origPrice=p=>+p.old_price>+p.price?+p.old_price:+p.price;
 function promoCalc(){
   const its=items();if(!its.length)return null;let best=null;
+  const cp=S.coupon;if(cp){ /* كود الخصم: على الأسعار الأصلية، وبيلغي أي خصم تاني */
+    const orig=its.reduce((a,x)=>a+unitOrig(x.p)*x.q,0),cur=its.reduce((a,x)=>a+unit(x.p)*x.q,0);
+    const after=cp.type=='egp'?Math.max(0,orig-(+cp.value||0)):orig*(1-(+cp.value||0)/100);
+    return {name:'كود '+cp.code,d:Math.round((cur-after)*100)/100,disc:Math.round((orig-after)*100)/100,adj:Math.round((orig-cur)*100)/100,codes:its.map(x=>x.p.code),pr:null,coupon:true}}
   for(const pr of (SITE().promos||[]).filter(promoActive)){
     const sel=its.filter(x=>pr.all!==false||(pr.codes||[]).includes(x.p.code));
     if(sel.reduce((a,x)=>a+x.q,0)<(+pr.minQty||1))continue;
@@ -500,7 +504,7 @@ function promoCalc(){
 const promoD=()=>(promoCalc()||{d:0}).d;
 const netTot=()=>Math.round((sub()-promoD()+delivery())*100)/100;
 function promoHint(){
-  const its=items();
+  const its=items();if(S.coupon)return '';
   for(const pr of (SITE().promos||[]).filter(promoActive)){
     const q=its.filter(x=>pr.all!==false||(pr.codes||[]).includes(x.p.code)).reduce((a,x)=>a+x.q,0),m=+pr.minQty||1;
     if(q>0&&q<m)return `<div class="note">🏷️ ضيف ${m-q} منتج كمان وخد خصم ${pr.type=='egp'?n2(+pr.value)+' ج':(+pr.value)+'%'}${pr.name?' ('+esc(pr.name)+')':''}</div>`}
@@ -630,6 +634,7 @@ function drawDrawer(){
   <label class="f">العنوان بالتفصيل</label><input class="in" id="f_addr" value="${esc(f.address)}" autocomplete="street-address">
   <label class="f">ملاحظات (اختياري)</label><input class="in" id="f_notes" value="${esc(f.notes)}">
   ${shipHTML()}
+  ${couponHTML()}
   <label class="f">طريقة الدفع</label>
   ${pays.map(([k,l])=>`<label class="pm ${S.pay==k?'on':''}"><input type="radio" name="pay" ${S.pay==k?'checked':''} onchange="setPay('${k}')"> ${l}</label>`).join('')}
   ${tr?`<div class="note">حوّل <b>${n2(netTot())} ج</b> على ${esc(cur.name||'')}:<br><b class="cp" onclick="copyTxt('${esc(num)}')">${esc(num)}</b> <small>(اضغط للنسخ)</small>${cur.note?'<br>'+esc(cur.note):''}<br>وبعدها اكتب رقم العملية أو ارفع صورة التحويل.</div>
@@ -637,6 +642,16 @@ function drawDrawer(){
   <label class="f">صورة التحويل (اختياري لو كتبت الرقم)</label><input class="in" id="f_rec" type="file" accept="image/*">`:''}
   ${S.err?`<div class="err">${esc(S.err)}</div>`:''}`;
   foot.innerHTML=totHTML()+`<button class="btn" id="sendBtn" onclick="submitOrder()" ${S.busy?'disabled':''}>${S.busy?'جاري الإرسال...':'✔ تأكيد الطلب'}</button><button class="btn sec2" onclick="S.view='cart';drawDrawer()">← رجوع للسلة</button>`}
+function couponHTML(){const c=S.coupon;
+  if(c)return `<div class="note" style="display:flex;gap:8px;align-items:center;justify-content:space-between"><span>🎟️ كود <b>${esc(c.code)}</b> مفعّل (${c.type=='egp'?n2(+c.value)+' ج':(+c.value)+'%'}) — بدل أي خصم تاني</span><button class="btn sec2" style="width:auto;margin:0;padding:4px 12px" onclick="removeCoupon()">إلغاء</button></div>`;
+  return `<label class="f">كود خصم (لو عندك)</label><div style="display:flex;gap:8px"><input class="in" id="f_cp" dir="ltr" autocomplete="off" value="${esc(S.cpIn||'')}" placeholder="اكتب الكود" style="flex:1"><button class="btn sec2" style="width:auto;margin:0;padding:0 18px" onclick="applyCoupon()" ${S.cpBusy?'disabled':''}>تطبيق</button></div>${S.cpErr?`<div class="err">${esc(S.cpErr)}</div>`:''}`}
+async function applyCoupon(){readForm();const v=(($('#f_cp')||{}).value||'').trim().toUpperCase();S.cpIn=v;S.cpErr='';
+  if(!v){S.cpErr='اكتب الكود الأول';return drawDrawer()}
+  S.cpBusy=true;drawDrawer();
+  try{const r=await api('/rest/v1/rpc/check_coupon',{method:'POST',body:JSON.stringify({p_code:v})});S.coupon={code:r.code,type:r.type,value:+r.value};S.cpIn=''}
+  catch(e){S.cpErr=e.message||'الكود غير صحيح'}
+  S.cpBusy=false;drawDrawer()}
+function removeCoupon(){readForm();S.coupon=null;S.cpErr='';drawDrawer()}
 function totHTML(){const pc=promoCalc(),d=delivery(),min=+S.shop.min_order||0;
   return `<div class="tot"><div><span>المنتجات</span><span>${n2(sub()+(pc?pc.adj:0))} ج</span></div>${pc&&pc.disc>0?`<div style="color:var(--plum)"><span>🏷️ ${esc(pc.name)}${pc.adj>0?' (بدل خصم المنتج)':''}</span><span>- ${n2(pc.disc)} ج</span></div>`:''}${d>0?`<div><span>التوصيل</span><span>${n2(d)} ج</span></div>`:''}<div class="g"><span>الإجمالي</span><span>${n2(sub()-promoD()+d)} ج</span></div></div>${promoHint()}${min&&sub()<min?`<div class="note">الحد الأدنى للطلب ${n2(min)} ج</div>`:''}`}
 function readForm(){const g=id=>($('#'+id)?.value??'').trim();
@@ -672,11 +687,17 @@ async function submitOrder(){
       if(r.ok)receipt=`${SB_URL}/storage/v1/object/public/receipts/${name}`;else if(!f.ref)throw new Error('تعذّر رفع الصورة، اكتب رقم العملية بدلها')}
       catch(e){if(!f.ref)throw e}}
     const payName=(payMethods().find(m=>m.k==S.pay)||{}).name||'كاش عند الاستلام';
-    const res=await api('/rest/v1/rpc/place_order',{method:'POST',body:JSON.stringify({
-      p_name:f.name,p_phone:f.phone,p_area:f.area,p_address:f.address,p_notes:[f.notes,shipNote(),promoNote(),optsNote(),optPriceNote(),attrNote()].filter(Boolean).join(' | '),p_pay:payName,p_pay_ref:f.ref||'',p_receipt:receipt,
-      p_items:items().map(x=>({code:x.p.code,qty:x.q}))})});
+    let cpTok='';
+    if(S.coupon){try{const cl=await api('/rest/v1/rpc/claim_coupon',{method:'POST',body:JSON.stringify({p_code:S.coupon.code,p_src:(attr()||{}).ch||'direct'})});cpTok=cl.tok;S.coupon={code:cl.code,type:cl.type,value:+cl.value}}
+      catch(e){S.coupon=null;throw e}}
+    let res;
+    try{res=await api('/rest/v1/rpc/place_order',{method:'POST',body:JSON.stringify({
+      p_name:f.name,p_phone:f.phone,p_area:f.area,p_address:f.address,p_notes:[f.notes,shipNote(),promoNote(),S.coupon?'كود: '+S.coupon.code+'#'+cpTok:'',optsNote(),optPriceNote(),attrNote()].filter(Boolean).join(' | '),p_pay:payName,p_pay_ref:f.ref||'',p_receipt:receipt,
+      p_items:items().map(x=>({code:x.p.code,qty:x.q}))})})}
+    catch(e){if(cpTok)api('/rest/v1/rpc/release_coupon',{method:'POST',body:JSON.stringify({p_tok:cpTok})}).catch(()=>{});throw e}
+    if(cpTok)api('/rest/v1/rpc/link_coupon',{method:'POST',body:JSON.stringify({p_tok:cpTok,p_no:String(res.no||'')})}).catch(()=>{});
     S.done={...res,delivery:delivery(),total:netTot(),promo:(promoCalc()||{disc:0}).disc,promoName:(promoCalc()||{}).name||'',pay:payName,ref:f.ref,name:f.name,phone:f.phone,area:f.area,address:f.address,notes:f.notes,lines:items().map(x=>({n:x.p.name+' '+(x.p.size||'')+(hasOpts(x.p)?' ('+optText(x.p)+')':''),q:x.q,t:(((promoCalc()||{codes:[]}).codes.includes(x.p.code))?unitOrig(x.p):unit(x.p))*x.q}))};
-    track('Purchase',{value:S.done.total,id:'TT'+S.done.no,items:cartItemsT()});S.cart={};saveCart();S.view='done';
+    S.coupon=null;S.cpIn='';track('Purchase',{value:S.done.total,id:'TT'+S.done.no,items:cartItemsT()});S.cart={};saveCart();S.view='done';
     for(const p of S.products){const el=$('#c-'+p.code);if(el)el.innerHTML=ctl(p)}
     updCart()
   }catch(e){S.err=e.message||'حصلت مشكلة، حاول تاني'}
