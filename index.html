@@ -419,7 +419,7 @@ const deliveryAreas=()=>{const st=SITE(),a=Array.isArray(st.deliveryAreas)?st.de
 const areaFee=()=>{const a=deliveryAreas().find(x=>String(x.name).trim()===String(S.f.area||'').trim());return a?Math.max(0,+a.fee||0):0};
 const shipFee=()=>areaFee();
 function shipNote(){const a=deliveryAreas().find(x=>String(x.name).trim()===String(S.f.area||'').trim());return a?((String(SITE().deliveryCo||'').trim()?'شركة الشحن: '+String(SITE().deliveryCo).trim()+' | ':'')+'منطقة التوصيل: '+a.name+' — '+n2(+a.fee||0)+' ج'):''}
-function shipHTML(){const L=deliveryAreas(),eta=String(SITE().deliveryEta||'').trim(),co=String(SITE().deliveryCo||'').trim();return `${co?`<div class="note">شركة الشحن: <b>${esc(co)}</b></div>`:''}${eta?`<div class="note">مدة التوصيل المتوقعة: ${esc(eta)}</div>`:''}${L.length?`<label class="f">منطقة التوصيل</label><select class="in" id="f_area" onchange="readForm();drawDrawer()"><option value="">اختار المنطقة</option>${L.map(a=>`<option value="${esc(a.name)}" ${S.f.area===a.name?'selected':''}>${esc(a.name)} — ${n2(+a.fee||0)} ج</option>`).join('')}</select>`:`<label class="f">المنطقة</label><input class="in" id="f_area" value="${esc(S.f.area||'')}" placeholder="المنطقة / المدينة">`}`}
+function shipHTML(){const L=deliveryAreas(),eta=String(SITE().deliveryEta||'').trim(),co=String(SITE().deliveryCo||'').trim();return `${co?`<div class="note">شركة الشحن: <b>${esc(co)}</b></div>`:''}${eta?`<div class="note">مدة التوصيل المتوقعة: ${esc(eta)}</div>`:''}${L.length?`<label class="f">منطقة التوصيل <b style="color:#c0392b">*</b></label><select class="in" id="f_area" required onchange="readForm();drawDrawer()"><option value="">اختار المنطقة</option>${L.map(a=>`<option value="${esc(a.name)}" ${S.f.area===a.name?'selected':''}>${esc(a.name)} — ${n2(+a.fee||0)} ج</option>`).join('')}</select>`:`<label class="f">المنطقة <b style="color:#c0392b">*</b></label><input class="in" id="f_area" required value="${esc(S.f.area||'')}" placeholder="المنطقة / المدينة">`}`}
 function refFoot(){const t=document.querySelector('#dFoot .tot');if(!t)return;const d=document.createElement('div');d.innerHTML=totHTML();const n=d.querySelector('.tot');if(n)t.innerHTML=n.innerHTML}
 function payMethods(){const st=SITE(),o=[];
   if(st.cashOn!==false)o.push({k:'cash',label:st.cashLabel||'💵 كاش عند الاستلام',name:'كاش عند الاستلام'});
@@ -676,6 +676,7 @@ async function submitOrder(){
   const om=optMissing();if(om)return fail('اختار '+om.g.name+' لـ '+om.p.name);
   if(f.name.length<2)return fail('اكتب اسمك');
   if(digits.length<10)return fail('رقم الموبايل مش مظبوط');
+  if(!String(f.area||'').trim())return fail('اختار منطقة التوصيل عشان تكمّل الطلب');
   if(deliveryAreas().length&&!deliveryAreas().some(a=>String(a.name).trim()===String(f.area||'').trim()))return fail('اختار منطقة التوصيل عشان نحدد السعر');
   if(f.address.length<3)return fail('اكتب عنوانك بالتفصيل');
   const tr=!!(payMethods().find(m=>m.k==S.pay)||{}).transfer,file=$('#f_rec')&&$('#f_rec').files[0];
